@@ -15,6 +15,20 @@ class NATSClient:
         if self.nc:
             await self.nc.close()
             
+    async def request(self, subject: str, data: dict, timeout: float = 10.0):
+        if not self.nc:
+             raise Exception("NATS not connected")
+        try:
+            response = await self.nc.request(
+                subject, 
+                json.dumps(data).encode(), 
+                timeout=timeout
+            )
+            return json.loads(response.data.decode())
+        except Exception as e:
+            print(f"NATS Request Error: {e}")
+            return {"error": str(e)}
+
     async def subscribe(self, subject: str, handler):
         async def message_handler(msg):
             try:
@@ -27,11 +41,10 @@ class NATSClient:
                     )
             except Exception as e:
                 print(f"Error handling message on {subject}: {e}")
-                error_response = {"error": str(e)}
                 if msg.reply:
                     await self.nc.publish(
                         msg.reply,
-                        json.dumps(error_response).encode()
+                        json.dumps({"error": str(e)}).encode()
                     )
         
         await self.nc.subscribe(subject, cb=message_handler)

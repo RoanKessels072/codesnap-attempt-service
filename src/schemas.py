@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 
 class AttemptCreate(BaseModel):
     user_id: int
@@ -17,12 +18,6 @@ class AttemptResponse(BaseModel):
     
     class Config:
         from_attributes = True
-
-class GradeRequest(BaseModel):
-    code: str
-    language: str
-    function_name: str
-    test_cases: list
 
 class BestAttemptRequest(BaseModel):
     user_id: int

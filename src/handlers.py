@@ -1,42 +1,76 @@
-from src.models import Attempt
 from src.database import get_session_local
-from src.schemas import AttemptResponse, AttemptCreate, GradeRequest, BestAttemptRequest
-from src.grading import grade_python_attempt
-from datetime import datetime, timezone
+from src.schemas import (
+    AttemptResponse, 
+    AttemptCreate, 
+    BestAttemptRequest
+)
+from src.grading import grade_submission_raw
+from src.nats_client import NATSClient
+from src import crud
+
+
+_nats_client: NATSClient = None
+
+def set_nats_client(client: NATSClient):
+    global _nats_client
+    _nats_client = client
 
 async def handle_create_attempt(data: dict):
     SessionLocal = get_session_local()
     db = SessionLocal()
     
     try:
-        msg = AttemptCreate(**data)
+        if not all(k in data for k in ["user_id", "exercise_id", "code"]):
+            return {"error": "Missing required fields: user_id, exercise_id, or code"}
         
-        attempt = Attempt(
-            user_id=msg.user_id,
-            exercise_id=msg.exercise_id,
-            code_submitted=msg.code,
-            attempted_at=datetime.now(timezone.utc)
+        if not all(k in data for k in ["language", "function_name", "test_cases"]):
+            return {"error": "Missing grading information: language, function_name, or test_cases"}
+        
+        attempt = crud.create_attempt(
+            db=db,
+            user_id=data["user_id"],
+            exercise_id=data["exercise_id"],
+            code=data["code"],
+            language=data["language"],
+            function_name=data["function_name"],
+            test_cases=data["test_cases"]
         )
         
-        if "language" in data and "function_name" in data and "test_cases" in data:
-            grade_result = grade_python_attempt(
-                msg.code,
-                data["function_name"],
-                data["test_cases"]
-            )
-            attempt.score = grade_result["score"]
-            attempt.stars = grade_result["stars"]
-        
-        db.add(attempt)
-        db.commit()
-        db.refresh(attempt)
-        
         return AttemptResponse.model_validate(attempt).model_dump(mode='json')
+        
+    except ValueError as e:
+        return {"error": str(e)}
     except Exception as e:
         print(f"Error creating attempt: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"error": f"Internal error: {str(e)}"}
+    finally:
+        db.close()
+
+
+async def handle_get_attempt(data: dict):
+    SessionLocal = get_session_local()
+    db = SessionLocal()
+    
+    try:
+        attempt_id = data.get("id")
+        if not attempt_id:
+            return {"error": "Missing attempt id"}
+        
+        attempt = crud.get_attempt_by_id(db, attempt_id)
+        
+        if not attempt:
+            return {"error": "Attempt not found"}
+        
+        return AttemptResponse.model_validate(attempt).model_dump(mode='json')
+        
+    except Exception as e:
+        print(f"Error getting attempt: {e}")
         return {"error": str(e)}
     finally:
         db.close()
+
 
 async def handle_get_user_attempts(data: dict):
     SessionLocal = get_session_local()
@@ -44,13 +78,44 @@ async def handle_get_user_attempts(data: dict):
     
     try:
         user_id = data.get("user_id")
-        attempts = db.query(Attempt).filter(Attempt.user_id == user_id).all()
+        if not user_id:
+            return {"error": "Missing user_id"}
         
-        return {
-            "attempts": [AttemptResponse.model_validate(a).model_dump(mode='json') for a in attempts]
-        }
+        attempts = crud.get_user_attempts(db, user_id)
+        return {"attempts": attempts}
+        
+    except Exception as e:
+        print(f"Error getting user attempts: {e}")
+        return {"error": str(e)}
     finally:
         db.close()
+
+
+async def handle_get_exercise_attempts(data: dict):
+    SessionLocal = get_session_local()
+    db = SessionLocal()
+    
+    try:
+        exercise_id = data.get("exercise_id")
+        if not exercise_id:
+            return {"error": "Missing exercise_id"}
+        
+        limit = data.get("limit")
+        attempts = crud.get_exercise_attempts(db, exercise_id, limit)
+        
+        return {
+            "attempts": [
+                AttemptResponse.model_validate(a).model_dump(mode='json') 
+                for a in attempts
+            ]
+        }
+        
+    except Exception as e:
+        print(f"Error getting exercise attempts: {e}")
+        return {"error": str(e)}
+    finally:
+        db.close()
+
 
 async def handle_get_best_attempt(data: dict):
     SessionLocal = get_session_local()
@@ -59,20 +124,18 @@ async def handle_get_best_attempt(data: dict):
     try:
         msg = BestAttemptRequest(**data)
         
-        attempt = db.query(Attempt).filter(
-            Attempt.user_id == msg.user_id,
-            Attempt.exercise_id == msg.exercise_id
-        ).order_by(
-            Attempt.stars.desc(),
-            Attempt.score.desc(),
-            Attempt.attempted_at.desc()
-        ).first()
+        best_attempt = crud.get_best_attempt_for_exercise(db, msg.user_id, msg.exercise_id)
         
-        if attempt:
-            return AttemptResponse.model_validate(attempt).model_dump(mode='json')
-        return {"error": "No attempts found"}
+        if best_attempt:
+            return best_attempt
+        return None
+        
+    except Exception as e:
+        print(f"Error getting best attempt: {e}")
+        return {"error": str(e)}
     finally:
         db.close()
+
 
 async def handle_get_all_best_attempts(data: dict):
     SessionLocal = get_session_local()
@@ -80,20 +143,37 @@ async def handle_get_all_best_attempts(data: dict):
     
     try:
         user_id = data.get("user_id")
+        if not user_id:
+            return {"error": "Missing user_id"}
         
-        attempts = db.query(Attempt).filter(Attempt.user_id == user_id).all()
+        best_attempts = crud.get_user_best_attempts(db, user_id)
+        return best_attempts
         
-        best_attempts = {}
-        for attempt in attempts:
-            ex_id = attempt.exercise_id
-            if ex_id not in best_attempts or (
-                attempt.stars > best_attempts[ex_id].stars or
-                (attempt.stars == best_attempts[ex_id].stars and attempt.score > best_attempts[ex_id].score)
-            ):
-                best_attempts[ex_id] = attempt
-        
-        return {
-            "attempts": [AttemptResponse.model_validate(a).model_dump(mode='json') for a in best_attempts.values()]
-        }
+    except Exception as e:
+        print(f"Error getting all best attempts: {e}")
+        return {"error": str(e)}
     finally:
         db.close()
+
+async def handle_grade_ephemeral(data: dict):
+    if not _nats_client:
+        return {"error": "NATS client not initialized in handler"}
+
+    try:
+        required = ["code", "language", "function_name", "test_cases"]
+        if not all(k in data for k in required):
+            return {"error": "Missing required fields: code, language, function_name, test_cases"}
+
+        result = await grade_submission_raw(
+            nats=_nats_client,
+            code=data["code"],
+            language=data["language"],
+            function_name=data["function_name"],
+            test_cases=data["test_cases"]
+        )
+        
+        return result
+        
+    except Exception as e:
+        print(f"Error grading ephemeral attempt: {e}")
+        return {"error": str(e)}

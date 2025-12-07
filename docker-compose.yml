@@ -1,0 +1,17 @@
+services:
+  attempt-service:
+    build: .
+    ports:
+      - "8003:8003"
+    env_file:
+      - .env
+    volumes:
+      - ./src:/app/src
+    command: python -m uvicorn src.main:app --host 0.0.0.0 --port 8003 --reload
+    networks:
+      - codesnap-network
+
+networks:
+  codesnap-network:
+    external: true
+    name: shared-codesnap-network
