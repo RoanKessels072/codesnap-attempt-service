@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import uvicorn
 
+from src.config import settings
 from src.database import init_db
 from src.nats_client import NATSClient
 from src.handlers import (
@@ -20,6 +21,7 @@ nats_client = NATSClient()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    
     print("Starting Attempt Service...")
     
     init_db()
@@ -38,6 +40,7 @@ async def lifespan(app: FastAPI):
     
     print("Attempt Service ready!")
     
+
     yield
     
     print("Shutting down Attempt Service...")

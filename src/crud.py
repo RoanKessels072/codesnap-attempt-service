@@ -1,7 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from src.models import Attempt
-from src.grading import grade_submission
 from datetime import datetime, timezone
 
 
@@ -10,49 +9,33 @@ def create_attempt(
     user_id: int, 
     exercise_id: int, 
     code: str,
-    language: str,
-    function_name: str,
-    test_cases: list
+    stars: int = 0,
+    score: int = 0
 ) -> Attempt:    
     if not code or not code.strip():
         raise ValueError("Code cannot be empty")
-    
-    if not test_cases:
-        raise ValueError("Test cases are required for grading")
     
     attempt = Attempt(
         user_id=user_id,
         exercise_id=exercise_id,
         code_submitted=code,
+        stars=stars,
+        score=score,
         attempted_at=datetime.now(timezone.utc)
     )
+    
     db.add(attempt)
     db.commit()
     db.refresh(attempt)
-
-    try:
-        grade_result = grade_submission(code, language, function_name, test_cases)
-        
-        attempt.score = grade_result["style_score"]
-        attempt.stars = grade_result["stars"]
-        
-        db.commit()
-        db.refresh(attempt)
-    except Exception as e:
-        print(f"Error grading submission: {e}")
-        db.commit()
-        db.refresh(attempt)
     
     return attempt
 
 
 def get_attempt_by_id(db: Session, attempt_id: int):
-    """Get a single attempt by ID"""
     return db.query(Attempt).filter(Attempt.id == attempt_id).first()
 
 
 def get_user_attempts(db: Session, user_id: int):
-    """Get all attempts for a user"""
     attempts = db.query(Attempt).filter(
         Attempt.user_id == user_id
     ).order_by(

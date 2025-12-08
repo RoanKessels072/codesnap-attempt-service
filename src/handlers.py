@@ -1,7 +1,6 @@
 from src.database import get_session_local
 from src.schemas import (
     AttemptResponse, 
-    AttemptCreate, 
     BestAttemptRequest
 )
 from src.grading import grade_submission_raw
@@ -16,38 +15,70 @@ def set_nats_client(client: NATSClient):
     _nats_client = client
 
 async def handle_create_attempt(data: dict):
+    print(f"Received attempt submission. Keys: {list(data.keys())}")
+    
     SessionLocal = get_session_local()
     db = SessionLocal()
     
     try:
-        if not all(k in data for k in ["user_id", "exercise_id", "code"]):
-            return {"error": "Missing required fields: user_id, exercise_id, or code"}
+        if not _nats_client:
+             print("Error: NATS client not available for grading")
+             return {"error": "Internal Service Error: Grading unavailable"}
+
+        required_fields = ["user_id", "exercise_id", "code", "language", "function_name", "test_cases"]
+        missing = [f for f in required_fields if f not in data]
         
-        if not all(k in data for k in ["language", "function_name", "test_cases"]):
-            return {"error": "Missing grading information: language, function_name, or test_cases"}
+        if missing:
+            print(f"Missing fields: {missing}")
+            return {"error": f"Missing required fields: {', '.join(missing)}"}
+
+        print(f"Grading submission for user {data['user_id']} on exercise {data['exercise_id']}...")
         
+        try:
+            grading_result = await grade_submission_raw(
+                nats=_nats_client,
+                code=data["code"],
+                language=data["language"],
+                function_name=data["function_name"],
+                test_cases=data["test_cases"]
+            )
+        except Exception as e:
+            print(f"Grading execution failed: {e}")
+            grading_result = {
+                "stars": 0, 
+                "style_score": 0, 
+                "test_pass_rate": 0, 
+                "feedback": "Error executing code. Service may be busy."
+            }
+
+        print(f"Grading complete. Stars: {grading_result.get('stars')}")
+
         attempt = crud.create_attempt(
             db=db,
             user_id=data["user_id"],
             exercise_id=data["exercise_id"],
             code=data["code"],
-            language=data["language"],
-            function_name=data["function_name"],
-            test_cases=data["test_cases"]
+            stars=grading_result.get("stars", 0),
+            score=int(grading_result.get("style_score", 0))
         )
+
+        response = AttemptResponse.model_validate(attempt).model_dump(mode='json')
         
-        return AttemptResponse.model_validate(attempt).model_dump(mode='json')
+        response["feedback"] = grading_result.get("feedback", "")
+        response["test_pass_rate"] = grading_result.get("test_pass_rate", 0)
+        response["execution_output"] = grading_result.get("execution_output", "")
+        
+        return response
         
     except ValueError as e:
         return {"error": str(e)}
     except Exception as e:
-        print(f"Error creating attempt: {e}")
+        print(f"CRITICAL Error creating attempt: {e}")
         import traceback
         traceback.print_exc()
         return {"error": f"Internal error: {str(e)}"}
     finally:
         db.close()
-
 
 async def handle_get_attempt(data: dict):
     SessionLocal = get_session_local()
@@ -147,7 +178,12 @@ async def handle_get_all_best_attempts(data: dict):
             return {"error": "Missing user_id"}
         
         best_attempts = crud.get_user_best_attempts(db, user_id)
-        return best_attempts
+        
+        result = {}
+        for exercise_id, attempt_data in best_attempts.items():
+            result[str(exercise_id)] = attempt_data
+        
+        return result
         
     except Exception as e:
         print(f"Error getting all best attempts: {e}")
