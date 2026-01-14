@@ -27,7 +27,17 @@ class NATSClient:
             return json.loads(response.data.decode())
         except Exception as e:
             print(f"NATS Request Error: {e}")
+            print(f"NATS Request Error: {e}")
             return {"error": str(e)}
+
+    async def publish(self, subject: str, data: dict):
+        if not self.nc:
+             raise Exception("NATS not connected")
+        try:
+            await self.nc.publish(subject, json.dumps(data).encode())
+        except Exception as e:
+            print(f"NATS Publish Error: {e}")
+            raise e
 
     async def subscribe(self, subject: str, handler):
         async def message_handler(msg):

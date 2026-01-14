@@ -3,13 +3,31 @@ services:
     build: .
     ports:
       - "8003:8003"
+    container_name: codesnap-attempt-service
     env_file:
       - .env
     command: python -m uvicorn src.main:app --host 0.0.0.0 --port 8003 --reload
     networks:
       - codesnap-network
+      - default
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres-attempt-service
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: codesnap
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - default
 
 networks:
   codesnap-network:
     external: true
     name: shared-codesnap-network
+
+volumes:
+  postgres_data:

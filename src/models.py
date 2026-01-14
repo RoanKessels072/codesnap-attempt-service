@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Text, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, Text, DateTime, String
 from sqlalchemy.orm import declarative_base
 from datetime import datetime, timezone
 
@@ -15,3 +15,4 @@ class Attempt(Base):
     score = Column(Integer, nullable=False, default=0)
     stars = Column(Integer, nullable=False, default=0)
     attempted_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    status = Column(String(20), nullable=False, default='pending')
