@@ -26,7 +26,6 @@ async def handle_create_attempt(data: dict):
             print(f"Missing fields. Received: {data.keys()}")
             return {"error": "Missing fields"}
 
-        # 1. Save Initial "PENDING" Attempt
         attempt = crud.create_attempt(
             db=db,
             user_id=data["user_id"],
@@ -39,7 +38,6 @@ async def handle_create_attempt(data: dict):
         db.commit()
         db.refresh(attempt)
         
-        # 2. Prepare the Job
         try:
             harness_code = grading.prepare_grading_job(
                 code=data["code"],
@@ -53,12 +51,11 @@ async def handle_create_attempt(data: dict):
             if len(data['test_cases']) > 0:
                  print(f"DEBUG: first test case: {data['test_cases'][0]}")
             
-            # 3. Publish "execution.job" (Fire and Forget)
             job_payload = {
                 "attempt_id": attempt.id,
                 "language": data["language"],
-                "code": harness_code,            # The code to RUN (with tests)
-                "original_code": data["code"],   # The code to LINT
+                "code": harness_code,
+                "original_code": data["code"],
                 "type": "grading_job"
             }
             
@@ -75,7 +72,6 @@ async def handle_create_attempt(data: dict):
             db.commit()
             return {"error": str(e)}
 
-        # 4. Return Pending Status immediately
         response = AttemptResponse.model_validate(attempt).model_dump(mode='json')
         return response
         
