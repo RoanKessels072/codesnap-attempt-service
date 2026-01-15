@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: attempt-service
+  labels:
+    app: attempt-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: attempt-service
+  template:
+    metadata:
+      labels:
+        app: attempt-service
+    spec:
+      containers:
+        - name: attempt-service
+          image: roankessels072/codesnap-attempt-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8003
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://postgres:postgres@postgres-attempt-service:5432/codesnap"
+            - name: NATS_URL
+              value: "nats://nats:4222"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
