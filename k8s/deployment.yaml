@@ -14,10 +14,12 @@ spec:
       labels:
         app: attempt-service
     spec:
+      imagePullSecrets:
+        - name: ecr-secret
       containers:
         - name: attempt-service
-          image: roankessels072/codesnap-attempt-service:latest
-          imagePullPolicy: Never
+          image: 239861161036.dkr.ecr.eu-central-1.amazonaws.com/codesnap/attempt-service:v1
+          imagePullPolicy: Always
           ports:
             - containerPort: 8003
           env:
@@ -39,4 +41,4 @@ spec:
               memory: "128Mi"
             limits:
               cpu: "500m"
-              memory: "512Mi"
+              memory: "256Mi"
