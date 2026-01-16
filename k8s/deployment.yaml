@@ -25,6 +25,13 @@ spec:
               value: "postgresql://postgres:postgres@postgres-attempt-service:5432/codesnap"
             - name: NATS_URL
               value: "nats://nats:4222"
+            - name: LOGFIRE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: logfire-secrets
+                  key: write-token
+            - name: LOGFIRE_SERVICE_NAME
+              value: "attempt-service"
 
           resources:
             requests:

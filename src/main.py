@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+import logfire
 
 from contextlib import asynccontextmanager
 import uvicorn
@@ -22,6 +23,7 @@ from src.nats_client import NATSClient
 from prometheus_fastapi_instrumentator import Instrumentator
 
 nats_client = NATSClient()
+logfire.configure()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,6 +52,7 @@ async def lifespan(app: FastAPI):
     await nats_client.close()
 
 app = FastAPI(title="Attempt Service", lifespan=lifespan)
+logfire.instrument_fastapi(app)
 
 # Prometheus metrics
 Instrumentator().instrument(app).expose(app)
