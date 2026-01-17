@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: attempt-service
-          image: roankessels/codesnap-attempt-service:latest
+          image: roankessels/codesnap-attempt-service:97bdede4d648f11aa1831f09f082f1367c083853
           imagePullPolicy: Always
           ports:
             - containerPort: 8003
