@@ -14,11 +14,9 @@ spec:
       labels:
         app: attempt-service
     spec:
-      imagePullSecrets:
-        - name: ecr-secret
       containers:
         - name: attempt-service
-          image: 239861161036.dkr.ecr.eu-central-1.amazonaws.com/codesnap/attempt-service:v1
+          image: roankessels/codesnap-attempt-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8003
